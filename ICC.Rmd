@@ -1,0 +1,171 @@
+---
+title: "Insuffisance cardiaque congestive"
+author: DIM's
+date: "`r Sys.Date()`"
+output:
+  rmdformats::readthedown_full_screen:
+    highlight: tango
+---
+
+# Partage d'un programme d'exploitation des données concernant l'insuffsance cardiaque
+Les données ont été extraites et déjà transmises aux utilisateurs finaux.
+Ils pourront utiliser ce rmd pour réaliser un rendu dans le groupe de travail consacré à cette prise en charge.
+
+# Méthode
+
+* Récupération des séjours de l'année 2016 porteurs des codes CIM-10 d'Insuffisance cardiaque.
+* typage des séjours avec code de décompensation (I50.-, R570, I11.0, I13.0, I132)
+* typage des séjours porteurs d'un des autres codes définis avec l'ARSIF
+* conservation des séjours avec un code de décompensation en prise en charge principale (diagnostic principal du séjour, déterminé par l'algorithme de groupage pour les séjours multi-unités)
+* conservation du premier séjour de l'année (hospitalisation index)
+
+```{r knitr_init, echo=FALSE, cache=FALSE}
+library(knitr)
+library(rmdformats)
+# lieu de stockage des données (locales)
+racine <- c("art-51 et ICC/")
+```
+
+```{r lecture, echo=FALSE, message=FALSE, warning=FALSE, cache=FALSE}
+library(dplyr, warn.conflicts = F, quietly = T)
+library(readxl)
+library(knitr)
+library(rmdformats)
+acthop <- read_excel(paste(racine, "mco_index_fin.xlsx", sep = ""))
+```
+Le nombre de patients avec une hospitalisation index en 2016 dans les hôpitaux d'Ile de France est de `r dim(acthop)[1]`.
+
+Dans un premier temps, nous nous intéressons aux patients pris en charge à l'AP-HP.
+
+```{r echo=FALSE, cache=FALSE}
+## Hospitalisation index en 2016 à l'AP-HP
+# les variables DC et sexe n'ont pas encore été extraites 
+#acthop <- acthop %>% filter(finessJ == "750712184")
+#a1 <- acthop %>% group_by(mois) %>% count(mois)
+#names(a1) <- c("Mois de sortie en 2016", "Nombre de séjours")
+#kable(a1, format = 'html', caption = "Sorties mensuelle des hospitalisations index de 2016")
+#dc <- acthop %>% group_by(modeSortie) %>% count(modeSortie) %>% filter(modeSortie == 9)
+#femmes <- acthop %>% group_by(sexe) %>% count(sexe) %>% filter(sexe == 2)
+
+#* Le nombre d'hospitalisations index à l'AP-HP est de `r dim(acthop)[1]`.
+#* Le nombre de décès est de `r dc[2]` (`r round(100*dc[2]/dim(acthop)[1],1)` %).
+#* L'âge moyen est `r round(mean(acthop$age),1)`.
+#* La proportion de femmes est de `r round(100*femmes[2]/dim(acthop)[1],1)` %.
+```
+ 
+## Répartition des hospitalisations index par hôpital
+```{r echo=FALSE, cache=FALSE}
+a3 <- acthop %>% group_by(rs) %>% count(rs) %>% arrange(desc(n))
+# a2 <- acthop %>% filter(modeSortie == 9) %>% group_by(rs) %>% count(rs) 
+# a3 <- a1 %>% left_join(a2, by = c("rs")) 
+names(a3) <- c("Hôpital", "Nombre de séjours")
+kable(a3, format = 'html', caption = "Hospitalisations index par hôpital en 2016")
+```
+
+# Activité post-hospitalisation index
+
+L'activtié d'hospitalisation (MCO, HAD et SSR) et l'activité externe réalisées après l'hospitalisation index ont été recensées à partir des données du PMSI régional. Ces activités ont été recherchées dans un intervalle de temps allant jusqu'à 365 jours après la sortie de l'hospitalisation index.
+
+## Activité MCO en post-hospitalisation index
+```{r echo=FALSE, cache=FALSE}
+acthop <- read_excel(paste(racine, "mco_index_fin.xlsx", sep = ""))
+nbpatidx <- dim(acthop)[1]
+# nbdc <- dim(acthop %>% filter(modeSortie == 9))[1]
+nbdc <- 0
+mco_post <- read_excel(paste(racine, "rhmcopost_fin.xlsx", sep = ""))
+a1 <- mco_post %>% group_by(numloc) %>% count(numloc) %>% arrange(desc(n))
+# nombre de patients avec réhospitalisation
+nbpatpost <- dim(a1)[1]
+meanhosp <- sum(a1$n)/nbpatpost
+# activité ambulatoire
+nbhdj <- dim(mco_post %>% filter(duree == 0))[1]
+dms <- sum(mco_post$duree)/(dim(mco_post)[1] - nbhdj)
+# durée moyenne d'hospitalisation pour les patients avec hospitalisaiton de plus de zéro nuit
+a1 <- mco_post %>% filter(duree > 0) %>% group_by(numloc) %>% count(numloc) %>% arrange(desc(n))
+dmh <- sum(mco_post$duree)/dim(a1)[1]
+nbhc <- sum(a1$n)
+```
+
+Le nombre de patients réhospitalisés en MCO est de `r nbpatpost` pour `r nbpatidx - nbdc` (nous avons oté les `r nbdc` décès survenus à l'issue de l'hospitalisation index).
+Ces patients génèrent `r nbhdj` hospitalisations partielles et `r nbhc` hospitalisations complètes.
+En moyenne, le nombre de journées d'HC est de `r round(dmh,1)` jours par patient.
+
+## Activité HAD en post-hospitalisation index
+```{r echo=FALSE, cache=FALSE}
+had_post <- read_excel(paste(racine, "rhhadpost_fin.xlsx", sep = ""))
+a1 <- had_post %>% group_by(numloc) %>% count(numloc) %>% arrange(desc(n))
+# nombre de patients avec réhospitalisation
+nbpatpost <- dim(a1)[1]
+meanhosp <- sum(a1$n)/nbpatpost
+nbhc <- sum(a1$n)
+# durée moyenne d'hospitalisation pour les patients avec hospitalisaiton de plus de zéro nuit
+a1 <- had_post %>% filter(!is.na(modeSortie)) %>% group_by(numloc) %>% count(numloc) %>% arrange(desc(n))
+dmh <- sum(had_post$duree, na.rm = T)/dim(a1)[1]
+```
+
+Le nombre de patients réhospitalisés en HAD est de `r nbpatpost` pour `r nbpatidx - nbdc`.
+Ces patients génèrent `r nbhc` hospitalisations.
+En moyenne, le nombre de journées d'hospitalisations en HAD est de `r round(dmh,1)` jours.
+
+## Activité SSR en post-hospitalisation index
+```{r echo=FALSE, cache=FALSE}
+ssr_post <- read_excel(paste(racine, "rhssrpost_fin.xlsx", sep = ""))
+a1 <- ssr_post %>% group_by(numloc) %>% count(numloc) %>% arrange(desc(n))
+# nombre de patients avec réhospitalisation
+nbpatpost <- dim(a1)[1]
+meanhosp <- sum(a1$n)/nbpatpost
+nbhc <- sum(a1$n)
+# durée moyenne d'hospitalisation pour les patients avec hospitalisaiton de plus de zéro nuit
+a1 <- ssr_post %>% filter(!is.na(modesortie)) %>% group_by(numloc) %>% count(numloc) %>% arrange(desc(n))
+dmh <- sum(had_post$duree, na.rm = T)/dim(a1)[1]
+```
+
+Le nombre de patients réhospitalisés est de `r nbpatpost` pour `r nbpatidx - nbdc`.
+Ces patients génèrent `r nbhc` hospitalisations.
+En moyenne, le nombre de journées d'hospitalisations en SSR est de `r round(dmh,1)` jours.
+
+## Activité externe en post-hospitalisation index 
+### Activité de consultation
+```{r echo=FALSE, cache=FALSE}
+ace_post <- read_excel(paste(racine, "rhacepostC_fin.xlsx", sep = ""))
+a1 <- ace_post %>% group_by(numloc) %>% count(numloc) %>% arrange(desc(n))
+nbpat <- dim(a1)[1]
+# durée moyenne d'hospitalisation pour les patients avec hospitalisaiton de plus de zéro nuit
+a1 <- ace_post %>% mutate(acte = stringr::str_split_fixed(code, " ", 2)[,1]) %>% group_by(acte) %>% 
+  count(acte) %>% arrange(desc(n))
+# nombre de patients avec consultation
+nbcons <- sum(a1$n)
+meancons <- sum(a1$n)/nbpatpost
+names(a1) <- c("Acte", "N")
+kable(a1, format = 'html', caption = "nombre de consultations issues du rafael C")
+```
+
+`r nbpat` patients génèrent `r nbcons` consultations.
+
+### Forfaits (dont passages aux urgences)
+```{r echo=FALSE, cache=FALSE}
+ace_post <- read_excel(paste(racine, "rhacepostB_fin.xlsx", sep = ""))
+a1 <- ace_post %>% group_by(numloc) %>% count(numloc) %>% arrange(desc(n))
+nbpat <- dim(a1)[1]
+# nombre de patients avec consultation
+# durée moyenne d'hospitalisation pour les patients avec hospitalisaiton de plus de zéro nuit
+a1 <- ace_post %>% group_by(code) %>% count(code) %>% arrange(desc(n))
+nbcons <- sum(a1$n)
+meancons <- sum(a1$n)/nbpatpost
+names(a1) <- c("Forfait", "N")
+kable(a1, format = 'html', caption = "nombre de forfaits issues du rafael B")
+a1 <- ace_post %>% filter(code == "ATU") %>% group_by(numloc) %>% count(numloc) %>% arrange(desc(n))
+
+```
+
+`r nbpat` patients génèrent `r nbcons` forfaits.
+
+## Conclusion
+
+La fréquence des soins dans l'année qui suit l'hospitalisation index estimée par ce premier travail est importante :
+
+* en MCO : 74% des patients sont réadmis en MCO avec 2,8 hospitalisations complètes (12,6 jours de DMS) et 2,3 hospitalisations partielles
+* en HAD : 12% des patients sont admis en HAD, ces admissions totalisent approximativement 59 jours par patient
+* en SSR : 24% des patients sont admis en SSR
+* on compte 3,8 consultations pour 56% de patients revenus en consultation après l'hospitalisation index
+* on compte 9003 passages aux urgences pour 5637 patients (1,6). La proportion de patients parmi les 24067 passant par le SAU (sans hospitalisation à l'issue) est de 23%.

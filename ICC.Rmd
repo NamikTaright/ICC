@@ -8,8 +8,8 @@ output:
 ---
 
 # Partage d'un programme d'exploitation des données concernant l'insuffsance cardiaque
-Les données ont été extraites et déjà transmises aux utilisateurs finaux.
-Ils pourront utiliser ce rmd pour réaliser un rendu dans le groupe de travail consacré à cette prise en charge.
+Les données sont extraites sous une forme agrégée du serveur sécurisé de l'ATIH (le programme développé par le SIMAP a été mis à disposition des utilisateurs de l'AP-HP passant par l'autorisation dont elle dispose au titre des finalités définies pour les professionnels de l'Information médicale).
+Ils pourront utiliser ce markdown de R pour réaliser un rendu dans le groupe de travail consacré à cette prise en charge.
 
 # Méthode
 
@@ -23,24 +23,32 @@ Ils pourront utiliser ce rmd pour réaliser un rendu dans le groupe de travail c
 library(knitr)
 library(rmdformats)
 # lieu de stockage des données (locales)
-racine <- c("art-51 et ICC/")
+racine <- c("data/")
 ```
 
 ```{r lecture, echo=FALSE, message=FALSE, warning=FALSE, cache=FALSE}
 library(dplyr, warn.conflicts = F, quietly = T)
 library(readxl)
-library(knitr)
-library(rmdformats)
 acthop <- read_excel(paste(racine, "mco_index_fin.xlsx", sep = ""))
+nindex <- dim(acthop)[1]
+nuhcd <- acthop %>% filter(uhcd > 0) %>% count()
+nrea <- acthop %>% filter(rea > 0) %>% count()
+nusi <- acthop %>% filter(usi > 0) %>% count()
+nusc <- acthop %>% filter(usc > 0) %>% count()
 ```
-Le nombre de patients avec une hospitalisation index en 2016 dans les hôpitaux d'Ile de France est de `r dim(acthop)[1]`.
+
+* Le nombre de patients avec une hospitalisation index en 2016 dans les hôpitaux d'Ile de France est de `r nindex`.
+* Le nombre de séjours avec passage en UHCD est de `r nuhcd` (`r round(100*nuhcd/nindex,1)`%).
+* Le nombre de séjours avec passage en réanimation est de `r nrea` (`r round(100*nrea/nindex,1)`%).
+* Le nombre de séjours avec passage en USI est de `r nusi` (`r round(100*nusi/nindex,1)`%).
+* Le nombre de séjours avec passage en USC est de `r nusc` (`r round(100*nusc/nindex,1)`%).
 
 Dans un premier temps, nous nous intéressons aux patients pris en charge à l'AP-HP.
 
 ```{r echo=FALSE, cache=FALSE}
 ## Hospitalisation index en 2016 à l'AP-HP
-# les variables DC et sexe n'ont pas encore été extraites 
-#acthop <- acthop %>% filter(finessJ == "750712184")
+# les variables mois de sortie, DC et sexe n'ont pas encore été extraites 
+actAPhop <- acthop %>% filter(finessJ == "750712184")
 #a1 <- acthop %>% group_by(mois) %>% count(mois)
 #names(a1) <- c("Mois de sortie en 2016", "Nombre de séjours")
 #kable(a1, format = 'html', caption = "Sorties mensuelle des hospitalisations index de 2016")
@@ -53,20 +61,40 @@ Dans un premier temps, nous nous intéressons aux patients pris en charge à l'A
 #* La proportion de femmes est de `r round(100*femmes[2]/dim(acthop)[1],1)` %.
 ```
  
-## Répartition des hospitalisations index par hôpital
+## Répartition des hospitalisations index par hôpital de l'AP-HP
 ```{r echo=FALSE, cache=FALSE}
-a3 <- acthop %>% group_by(rs) %>% count(rs) %>% arrange(desc(n))
+a3 <- actAPhop %>% group_by(rs) %>% count(rs) %>% arrange(desc(n))
 # a2 <- acthop %>% filter(modeSortie == 9) %>% group_by(rs) %>% count(rs) 
 # a3 <- a1 %>% left_join(a2, by = c("rs")) 
 names(a3) <- c("Hôpital", "Nombre de séjours")
 kable(a3, format = 'html', caption = "Hospitalisations index par hôpital en 2016")
 ```
 
-# Activité post-hospitalisation index
 
+# Activité MCO en pré-hospitalisation index
+```{r echo=FALSE, cache=FALSE}
+acthop <- read_excel(paste(racine, "mco_index_fin.xlsx", sep = ""))
+mco_pre_init <- read_excel(paste(racine, "mco_ant_total.xlsx", sep = ""))
+mco_pre <- mco_pre_init %>% filter(n_hosp_ant != 0) 
+# nombre de patients avec au moins une hospitalisation antérieure
+nbpatpre <- dim(mco_pre)[1]
+p1 <- round(100*nbpatpre/dim(mco_pre_init)[1],1)
+# nombre de patients avec une hospitalisation antérieure avec un code de décompensation
+nb_decomp <- mco_pre %>% summarise(n = sum(n_decomp_ant > 0)) 
+# nombre de patients avec une hospitalisation antérieure pour une décompensation
+nb_hdecomp <- mco_pre %>% summarise(n = sum(n_dp_ant > 0)) 
+# 
+p2 <- round(100*nb_hdecomp/nbpatpre,1)
+# effecement des données pré initialement chargées
+rm(mco_pre_init)
+```
+Le nombre de patients hospitalisés en MCO avant l'hsopitalisation index est de `r nbpatpre` (`r p1`%).
+Le nombre de patients hospitalisés pour une décompensation est de `r nb_hdecomp` (soit  `r round(100*nb_hdecomp/nbpatpre,1)`% hospitalisations antérieures pour décompensation parmi les patients ayant une hospitalisation antérieure). Cette proportion est très basse et nécessite de retourner aux données pour vérifier que le programme calculant est correct.
+
+# Activité post-hospitalisation index
 L'activtié d'hospitalisation (MCO, HAD et SSR) et l'activité externe réalisées après l'hospitalisation index ont été recensées à partir des données du PMSI régional. Ces activités ont été recherchées dans un intervalle de temps allant jusqu'à 365 jours après la sortie de l'hospitalisation index.
 
-## Activité MCO en post-hospitalisation index
+## Activité MCO en post-hospitalisation index
 ```{r echo=FALSE, cache=FALSE}
 acthop <- read_excel(paste(racine, "mco_index_fin.xlsx", sep = ""))
 nbpatidx <- dim(acthop)[1]
@@ -169,3 +197,8 @@ La fréquence des soins dans l'année qui suit l'hospitalisation index estimée 
 * en SSR : 24% des patients sont admis en SSR
 * on compte 3,8 consultations pour 56% de patients revenus en consultation après l'hospitalisation index
 * on compte 9003 passages aux urgences pour 5637 patients (1,6). La proportion de patients parmi les 24067 passant par le SAU (sans hospitalisation à l'issue) est de 23%.
+
+```{r echo=FALSE, cache=FALSE}
+# fin de programme
+rm(list=ls())
+```
